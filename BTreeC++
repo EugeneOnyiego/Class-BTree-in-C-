@@ -1,0 +1,123 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+
+class BTreeNode {
+public:
+    bool isLeaf;
+    std::vector<std::pair<std::string, std::string>> keys; // Stores (file_name, location)
+    std::vector<BTreeNode*> children;
+
+    BTreeNode(bool isLeaf);
+};
+
+BTreeNode::BTreeNode(bool isLeaf) {
+    this->isLeaf = isLeaf;
+}
+
+// BTree class with insert and search methods
+class BTree {
+private:
+    BTreeNode* root;
+    int t; // Minimum degree (defines range of children)
+
+    void insertNonFull(BTreeNode* node, const std::string& file_name, const std::string& location);
+    void splitChild(BTreeNode* parent, int index, BTreeNode* fullChild);
+    BTreeNode* search(BTreeNode* node, const std::string& file_name);
+
+public:
+    BTree(int t);
+    void insert(const std::string& file_name, const std::string& location);
+    std::string search(const std::string& file_name);
+};
+
+BTree::BTree(int t) {
+    this->t = t;
+    root = new BTreeNode(true); // Root is initially a leaf
+}
+
+void BTree::insert(const std::string& file_name, const std::string& location) {
+    if (root->keys.size() == 2 * t - 1) { // If root is full
+        BTreeNode* newRoot = new BTreeNode(false);
+        newRoot->children.push_back(root); // Make old root a child of new root
+        splitChild(newRoot, 0, root);
+        root = newRoot;
+    }
+    insertNonFull(root, file_name, location);
+}
+
+void BTree::insertNonFull(BTreeNode* node, const std::string& file_name, const std::string& location) {
+    int i = node->keys.size() - 1;
+
+    if (node->isLeaf) {
+        // Insert file_name and location in the correct position in the leaf node
+        node->keys.push_back({file_name, location});
+        std::sort(node->keys.begin(), node->keys.end()); // Keep keys ordered
+    } else {
+        while (i >= 0 && file_name < node->keys[i].first)
+            i--;
+        i++;
+
+        if (node->children[i]->keys.size() == 2 * t - 1) {
+            splitChild(node, i, node->children[i]);
+            if (file_name > node->keys[i].first)
+                i++;
+        }
+        insertNonFull(node->children[i], file_name, location);
+    }
+}
+
+void BTree::splitChild(BTreeNode* parent, int index, BTreeNode* fullChild) {
+    BTreeNode* newChild = new BTreeNode(fullChild->isLeaf);
+    newChild->keys.assign(fullChild->keys.begin() + t, fullChild->keys.end());
+    fullChild->keys.resize(t - 1);
+
+    if (!fullChild->isLeaf) {
+        newChild->children.assign(fullChild->children.begin() + t, fullChild->children.end());
+        fullChild->children.resize(t);
+    }
+
+    parent->children.insert(parent->children.begin() + index + 1, newChild);
+    parent->keys.insert(parent->keys.begin() + index, fullChild->keys[t - 1]);
+}
+
+std::string BTree::search(const std::string& file_name) {
+    BTreeNode* node = search(root, file_name);
+    if (node != nullptr) {
+        for (const auto& key : node->keys) {
+            if (key.first == file_name)
+                return key.second;
+        }
+    }
+    return "File not found";
+}
+
+BTreeNode* BTree::search(BTreeNode* node, const std::string& file_name) {
+    int i = 0;
+    while (i < node->keys.size() && file_name > node->keys[i].first)
+        i++;
+
+    if (i < node->keys.size() && node->keys[i].first == file_name)
+        return node;
+
+    if (node->isLeaf)
+        return nullptr;
+
+    return search(node->children[i], file_name);
+}
+
+// Example usage
+int main() {
+    BTree btree(3);
+
+    btree.insert("file1.txt", "/path/to/file1.txt");
+    btree.insert("file2.txt", "/path/to/file2.txt");
+    btree.insert("file3.txt", "/path/to/file3.txt");
+
+    // Search for a file
+    std::string location = btree.search("file2.txt");
+    std::cout << "Location of file2.txt: " << location << std::endl; // Output: /path/to/file2.txt
+
+    return 0;
+}
